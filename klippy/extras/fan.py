@@ -4,11 +4,13 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 from . import pulse_counter, output_pin
+import logging
 
 class Fan:
     def __init__(self, config, default_shutdown_speed=0.):
         self.printer = config.get_printer()
-        self.last_fan_value = self.last_req_value = 0.
+        self.last_fan_value = self.last_req_value = 0. 
+        self.start_check_time = 0.
         # Read config
         self.max_power = config.getfloat('max_power', 1., above=0., maxval=1.)
         self.kick_start_time = config.getfloat('kick_start_time', 0.1,
@@ -44,6 +46,10 @@ class Fan:
         self.printer.register_event_handler("gcode:request_restart",
                                             self._handle_request_restart)
 
+        self.gcode = self.printer.lookup_object('gcode')
+        
+        self.fan_name = config.get_name().split()[-1]  # Extracts 'chamber_fan' or 'hotend_fan'
+
     def get_mcu(self):
         return self.mcu_fan.get_mcu()
     def _apply_speed(self, print_time, value):
@@ -72,9 +78,30 @@ class Fan:
         self.gcrq.queue_gcode_request(value)
     def _handle_request_restart(self, print_time):
         self.set_speed(0., print_time)
-
+    def reCheck(self, eventtime):
+        tachometer_status = self.tachometer.get_status(eventtime)
+        rpm = tachometer_status['rpm']
+        if self.last_fan_value >=0.2 and rpm == 0.0:
+            if self.fan_name == 'hotend_fan':
+                self.printer.invoke_shutdown("Exception in Hotend_fan")
+            elif self.fan_name == 'bed_fan':
+                self.printer.invoke_shutdown("Exception in bed_fan")
+            elif self.fan_name == 'chamber_fan':
+                self.gcode.run_script_from_command('SET_HEATER_TEMPERATURE HEATER=chamber_heater TARGET=0')
+                self.gcode.respond_info("Exception in chamber_fan")    
+            elif self.fan_name == 'fan2':
+                self.gcode.respond_info("Exception in exhaust_fan")    
     def get_status(self, eventtime):
         tachometer_status = self.tachometer.get_status(eventtime)
+        rpm = tachometer_status['rpm']
+        if self.last_fan_value >= 0.2 and rpm == 0.0:
+            if self.start_check_time == 0:
+                self.start_check_time = eventtime
+            elif eventtime - self.start_check_time >= 20.0:
+                self.reCheck(eventtime)
+                self.start_check_time = 0 
+        else:
+            self.start_check_time = 0
         return {
             'speed': self.last_req_value,
             'rpm': tachometer_status['rpm'],

@@ -35,6 +35,7 @@ class Printer:
         self.run_result = None
         self.event_handlers = {}
         self.objects = collections.OrderedDict()
+        self.shutCode = 0
         # Init printer components that must be setup prior to config
         for m in [gcode, webhooks]:
             m.add_early_printer_objects(self)
@@ -204,6 +205,17 @@ class Printer:
         if self.in_shutdown_state:
             return
         logging.error("Transition to shutdown state: %s", msg)
+        
+        mcu_msg = details.get('reason', '')
+        logging.info("invoke_shutdown mcu_msg: %s, msg: %s", mcu_msg, msg)
+        
+        for index, theMsg in enumerate(["Lost communication with MCU", "Shutdown due to webhooks request", "ADC out of range", "Heater extruder not heating at expected rate",
+                                      "Heater heater_bed not heating at expected rate", "TMC 'stepper_x' reports error", "TMC 'stepper_y' reports error",
+                                      "TMC 'stepper_z' reports error", "TMC 'extruder' reports error", "Move queue overflow", "Missed scheduling of next digital out event",
+                                      "Unable to write tmc spi 'stepper_x' register", "Unable to write tmc spi 'stepper_y' register", "Exception in Hotend_fan"]):
+            if theMsg in msg or theMsg in mcu_msg:
+                self.shutCode = 60 + index
+         
         self.in_shutdown_state = True
         self._set_state(msg)
         for cb in self.event_handlers.get("klippy:shutdown", []):

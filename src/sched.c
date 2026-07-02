@@ -82,16 +82,27 @@ insert_timer(struct timer *pos, struct timer *t, uint32_t waketime)
 }
 
 // Schedule a function call at a supplied time.
+#define MIN_INTERVAL 50
 void
 sched_add_timer(struct timer *add)
 {
     uint32_t waketime = add->waketime;
     irqstatus_t flag = irq_save();
     struct timer *tl = SchedStatus.timer_list;
+
+    if(timer_is_before(waketime, timer_read_time() + MIN_INTERVAL))
+    {
+        waketime = timer_read_time() + MIN_INTERVAL;
+        add->waketime = waketime;
+    }
+    waketime = add -> waketime;
+
+
     if (unlikely(timer_is_before(waketime, tl->waketime))) {
         // This timer is before all other scheduled timers
-        if (timer_is_before(waketime, timer_read_time()))
-            try_shutdown("Timer too close");
+        // if (timer_is_before(waketime, timer_read_time()))
+        //     try_shutdown("Timer too close");
+
         if (tl == &deleted_timer)
             add->next = deleted_timer.next;
         else

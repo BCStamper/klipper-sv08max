@@ -63,6 +63,9 @@ class RunoutHelper:
         if is_filament_present == self.filament_present:
             return
         self.filament_present = is_filament_present
+        if not is_filament_present:
+            self.gcode.run_script_from_command('SET_PIN PIN=green_led VALUE=0.00')
+            self.gcode.run_script_from_command('SET_GCODE_VARIABLE MACRO=variables VARIABLE=stop_feeding VALUE=True')
         eventtime = self.reactor.monotonic()
         if eventtime < self.min_event_systime or not self.sensor_enabled:
             # do not process during the initialization time, duplicates,

@@ -31,6 +31,12 @@ REG_DRIVE_CURRENT0 = 0x1e
 REG_MANUFACTURER_ID = 0x7e
 REG_DEVICE_ID = 0x7f
 
+class ErrBitMap:
+    I2C_BUS_NACK = 1
+    I2C_BUS_TIMEOUT = 2
+    I2C_BUS_BUSY = 5
+    I2C_BUS_ERR = 7
+
 # Tool for determining appropriate DRIVE_CURRENT register
 class DriveCurrentCalibrate:
     def __init__(self, config, sensor):
@@ -76,13 +82,14 @@ class DriveCurrentCalibrate:
 class LDC1612:
     def __init__(self, config, calibration=None):
         self.printer = config.get_printer()
+        self.gcode = self.printer.lookup_object('gcode')
         self.calibration = calibration
         self.dccal = DriveCurrentCalibrate(config, self)
         self.data_rate = 250
         # Setup mcu sensor_ldc1612 bulk query code
         self.i2c = bus.MCU_I2C_from_config(config,
                                            default_addr=LDC1612_ADDR,
-                                           default_speed=400000)
+                                           default_speed=100000)
         self.mcu = mcu = self.i2c.get_mcu()
         self.oid = oid = mcu.create_oid()
         self.query_ldc1612_cmd = None
@@ -113,6 +120,14 @@ class LDC1612:
         hdr = ('time', 'frequency', 'z')
         self.batch_bulk.add_mux_endpoint("ldc1612/dump_ldc1612", "sensor",
                                          self.name, {'header': hdr})
+        self.i2c_err_flag = 0
+        mcu.register_response(self._response_i2c_error, "ldc1612_i2c_report")
+        mcu.register_response(self._response_query_loop, "ldc1612_query_loop_report")
+        self.gcode.register_command("EDDY_QUERY_LOOP", self.cmd_LDC1612_QUERY_LOOP, desc="query loop")
+        self.freq = 0
+        self.last_freq = 0
+        self.freq_array = []
+        self.time_record = 0
     def _build_config(self):
         cmdqueue = self.i2c.get_command_queue()
         self.query_ldc1612_cmd = self.mcu.lookup_command(
@@ -121,7 +136,8 @@ class LDC1612:
                                           oid=self.oid, cq=cmdqueue)
         self.ldc1612_setup_home_cmd = self.mcu.lookup_command(
             "ldc1612_setup_home oid=%c clock=%u threshold=%u"
-            " trsync_oid=%c trigger_reason=%c error_reason=%c", cq=cmdqueue)
+            " trsync_oid=%c trigger_reason=%c error_reason=%c"
+            " homing_method=%u", cq=cmdqueue)
         self.query_ldc1612_home_state_cmd = self.mcu.lookup_query_command(
             "query_ldc1612_home_state oid=%c",
             "ldc1612_home_state oid=%c homing=%c trigger_clock=%u",
@@ -139,13 +155,13 @@ class LDC1612:
         self.batch_bulk.add_client(cb)
     # Homing
     def setup_home(self, print_time, trigger_freq,
-                   trsync_oid, hit_reason, err_reason):
+                   trsync_oid, hit_reason, err_reason, homing_method):
         clock = self.mcu.print_time_to_clock(print_time)
         tfreq = int(trigger_freq * (1<<28) / float(LDC1612_FREQ) + 0.5)
         self.ldc1612_setup_home_cmd.send(
-            [self.oid, clock, tfreq, trsync_oid, hit_reason, err_reason])
+            [self.oid, clock, tfreq, trsync_oid, hit_reason, err_reason, homing_method])
     def clear_home(self):
-        self.ldc1612_setup_home_cmd.send([self.oid, 0, 0, 0, 0, 0])
+        self.ldc1612_setup_home_cmd.send([self.oid, 0, 0, 0, 0, 0, 0])
         if self.mcu.is_fileoutput():
             return 0.
         params = self.query_ldc1612_home_state_cmd.send([self.oid])
@@ -165,14 +181,30 @@ class LDC1612:
     def _start_measurements(self):
         # In case of miswiring, testing LDC1612 device ID prevents treating
         # noise or wrong signal as a correctly initialized device
+        retry_cnt = 0
         manuf_id = self.read_reg(REG_MANUFACTURER_ID)
         dev_id = self.read_reg(REG_DEVICE_ID)
-        if manuf_id != LDC1612_MANUF_ID or dev_id != LDC1612_DEV_ID:
-            raise self.printer.command_error(
-                "Invalid ldc1612 id (got %x,%x vs %x,%x).\n"
-                "This is generally indicative of connection problems\n"
-                "(e.g. faulty wiring) or a faulty ldc1612 chip."
-                % (manuf_id, dev_id, LDC1612_MANUF_ID, LDC1612_DEV_ID))
+        # Loop test to prevent external interference when read only once, read the wrong data
+        while (manuf_id != LDC1612_MANUF_ID or dev_id != LDC1612_DEV_ID):
+            if retry_cnt > 2:
+                if self.i2c_err_flag != 0:
+                    if self.i2c_err_flag & (1 << ErrBitMap.I2C_BUS_BUSY) and self.i2c_err_flag & (1 << ErrBitMap.I2C_BUS_TIMEOUT):
+                        self.gcode.run_script_from_command('M117 Tip code: 112')
+                        msg = "LDC1612 I2C bus busy or timeout error,please check the connection between the sensor module and the mainboard."
+                    else:
+                        self.gcode.run_script_from_command('M117 Tip code: 113')
+                        msg = "LDC1612 I2C bus error.There may have been internal or external interference during the communication."
+                else:
+                    self.gcode.run_script_from_command('M117 Tip code: 114')
+                    msg = "Invalid ldc1612 id (got %x,%x vs %x,%x).\n\
+                           This is generally indicative of connection problems\n\
+                           (e.g. faulty wiring) or a faulty ldc1612 chip."\
+                           % (manuf_id, dev_id, LDC1612_MANUF_ID, LDC1612_DEV_ID)
+                self.i2c_err_flag = 0
+                raise self.printer.command_error(msg)
+            manuf_id = self.read_reg(REG_MANUFACTURER_ID)
+            dev_id = self.read_reg(REG_DEVICE_ID)
+            retry_cnt += 1 
         # Setup chip in requested query rate
         rcount0 = LDC1612_FREQ / (16. * (self.data_rate - 4))
         self.set_reg(REG_RCOUNT0, int(rcount0 + 0.5))
@@ -204,3 +236,41 @@ class LDC1612:
             self.calibration.apply_calibration(samples)
         return {'data': samples, 'errors': self.last_error_count,
                 'overflows': self.ffreader.get_last_overflows()}
+    def _response_i2c_error(self, params):
+        self.i2c_err_flag = params["err_code"]
+        logging.info("report ldc1612 i2c register: cr1_data=%u cr2_data=%u sr1_data=%u sr2_data=%u dr_data=%u err_code=%u", 
+                      params["cr1_data"], params["cr2_data"],
+                      params["sr1_data"], params["sr2_data"],
+                      params["dr_data"],  params["err_code"])
+    def write_data_to_file(self, time_value, z_pos, frequency_value):
+        try:
+            with open('/home/sovol/klipper/klippy/extras/sensor_data.txt', 'a') as file:
+                file.write(f"{time_value} {z_pos} {frequency_value}\n")
+                file.flush()
+        except FileNotFoundError as e:
+            print(f"File not found: {e}")
+        except PermissionError as e:
+            print(f"Permission error: {e}")
+        except Exception as e:
+            print(f"Other error: {e}")
+    def cmd_LDC1612_QUERY_LOOP(self, gcmd):
+        self.freq_array.clear()
+        rest_ticks = 0
+        if gcmd.get("SWITCH", "OFF") == "ON":
+            rest_ticks = self.mcu.seconds_to_clock(0.5 / self.data_rate)
+        gcmd.respond_info("rest_ticks:%u" % (rest_ticks))
+        self.query_ldc1612_cmd.send([self.oid, rest_ticks])
+    def _response_query_loop(self, params):
+        kin = self.printer.lookup_object('toolhead').get_kinematics()
+        _stepper_z = kin.get_steppers()[2]
+        _z_cmd_pos = _stepper_z.get_commanded_position()
+        self.last_freq = self.freq
+        self.freq = params['freq']
+        self.time_record+=1
+        self.freq_array.append(self.freq)
+        self.write_data_to_file(self.time_record, _z_cmd_pos, self.freq)
+        # if self.freq != self.last_freq:
+        #     self.write_data_to_file(self.time_record, _z_cmd_pos, self.freq)
+        if self.freq_array.count(self.freq) == 0:
+            self.freq_array.append(self.freq)
+            print(f'freq_array:{self.freq_array}')

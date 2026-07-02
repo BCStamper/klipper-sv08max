@@ -12,8 +12,8 @@
 #include "command.h" // DECL_CONSTANT_STR
 #include "internal.h" // get_pclock_frequency
 #include "sched.h" // sched_main
-
-
+#include "stm32/gpio.h"
+ 
 /****************************************************************
  * Clock setup
  ****************************************************************/
@@ -245,6 +245,15 @@ armcm_main(void)
     dfu_reboot_check();
 
     clock_setup();
+
+    gpio_peripheral(GPIO('B', 0), GPIO_OUTPUT, 0);
+    gpio_out_setup(GPIO('B', 0), 0);
+    gpio_peripheral(GPIO('E', 11), GPIO_OUTPUT, 0);
+    gpio_out_setup(GPIO('E', 11), 0);
+    gpio_peripheral(GPIO('D', 12), GPIO_OUTPUT, 0);
+    gpio_out_setup(GPIO('D', 12), 0);
+    gpio_peripheral(GPIO('E', 14), GPIO_OUTPUT, 0);
+    gpio_out_setup(GPIO('E', 14), 1); 
 
     sched_main();
 }
