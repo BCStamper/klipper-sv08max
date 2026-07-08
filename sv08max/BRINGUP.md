@@ -1,137 +1,188 @@
 # SV08 MAX Mainline Bring-Up & Offset Calibration Plan
 
-New toolhead: Yavoth Demon Remix / EBB36 CAN v1.2 (MAX31865, PT100) / BTT Eddy Duo (CAN) /
-Rapido 2 UHF Plus / Orbiter v2.5. Klipper: `sv08max-master` branch (tracks upstream master).
+New toolhead: Yavoth Demon Remix (custom carriage adapter keeping the Sovol steel-plate
+mount + belt clamps) / EBB36 CAN v1.2 (MAX31865, PT100, onboard ADXL345) / BTT Eddy Duo
+(CAN) / Rapido 2 UHF Plus / Orbiter v2.5. Klipper: `sv08max-master` branch.
+Workload target: long PETG-CF prints — reliability over features.
 
-Safety nets before starting: stock eMMC/config backup;
+Flash strategy: **3DPrintDemon's "Mainline Your MAX" method** — keep the stock Sovol
+eMMC image, swap only Klipper via KIAUH, flash MCUs over CAN. No eMMC reimage.
+Guide: 3DPrintDemon/Demon_Klipper_Essentials_Unified →
+`Documentation/INSTALL_INSTRUCTIONS/SOVOL_SV08_MAX_SETUP/Mainline_Your_SV08_MAX.md`
+(consider supporting his Patreon if this saves your bacon).
+
+Safety nets: spare pre-flashed Sovol eMMC (full factory rollback, on hand); ST-Link V2 +
+STM32CubeProgrammer (on hand); config backup untouched;
 [Moffy97/sovol-sv08max-toolhead-recovery](https://github.com/Moffy97/sovol-sv08max-toolhead-recovery)
-(SBC-as-SWD unbrick for toolhead/buffer MCUs).
+(SBC-as-SWD unbrick, no ST-Link needed).
 
 ---
 
-## Phase 0 — Bench prep (printer still stock and printing)
+## Phase 0 — Host conversion (stock image, Demon method)
 
-1. Flash Katapult + Klipper (from `sv08max-master`) on EBB36 (STM32G0B1, 8MHz crystal,
-   CAN PB0/PB1, 1M) and Eddy Duo (per BTT docs, DIP switch → CAN) on the bench via USB.
-2. **⚠️ CAN TERMINATION — check before FIRST plug-in of the new toolhead** (you asked to be
-   reminded): exactly two 120Ω terminators at the two physical ends of the bus. EBB36 and
-   Eddy Duo both have termination jumpers; the mainboard bridge and buffer board are already
-   on the bus. Power off, measure across CANH/CANL: **~60Ω = correct**. ~40Ω = three
-   terminators; ~120Ω = one.
-3. Cutover weekend only: flash buffer F103 and mainboard H750 (128KiB bootloader — supported
-   by upstream menuconfig on this branch; build configs mirror Sovol's `.config*` files kept
-   on the `sovol-stock-fork` branch).
-4. `~/klipper/scripts/canbus_query.py can0` → fill all four `TODO_*_UUID` in printer.cfg.
-   Expect NEW UUIDs everywhere (stock firmware hardcoded them).
+1. **Backup**: download `/config` untouched; keep the spare eMMC sealed.
+2. KIAUH: `cd kiauh && git pull`, run `~/kiauh/kiauh.sh`.
+3. **Point KIAUH at OUR fork** (Settings `S`): repo
+   `https://github.com/BCStamper/klipper-sv08max`, branch `sv08max-master`.
+   This replaces the Demon guide's `Klipper3d/klipper` master AND makes his manual
+   Kconfig `nano` step unnecessary — upstream master (which we track) already allows
+   the 128KiB bootloader on STM32H750.
+4. Remove Sovol Klipper (`3 Remove → 1 Klipper`), install Klipper from the fork
+   (`1 Install → 1 Klipper`).
+5. Extras: `4 Advanced → 5 Input Shaper` packages: YES. `E Extensions → 1 G-Code Shell
+   Command → Install` (example command: NO). NOTE: our fork already ships
+   `gcode_shell_command.py`; installing the KIAUH extension is harmless either way.
+6. Optional (eddy-ng path, see Phase 4 alternative): `git clone
+   https://github.com/vvuk/eddy-ng && cd eddy-ng && ./install.sh`.
+7. Deploy the `sv08max/` overlay configs into `~/printer_data/config/`; `sudo reboot`.
+8. Expect the big red MCU-version error — that's the cue for Phase 0.75.
 
-### Phase 0.5 — EBB36 jumper checklist (before closing up the toolhead)
+## Phase 0.75 — MCU flashing over CAN (no ST-Link happy path)
 
-- **MAX31865 wire-count jumpers → 2-wire** (Rapido PT100 cartridge is 2-wire). The board
-  supports PT100/PT1000 and 2/4-wire via jumpers — config assumes PT100 2-wire, 430Ω ref.
-- **CAN termination jumper**: set per the Phase 0 topology decision (exactly two 120Ω on
-  the whole bus — EBB36 and Eddy Duo both have jumpers).
-- **Endstop header**: identify the pin for the new X-endstop switch against the BTT EBB36
-  v1.2 pinout PDF (draft assumes PB6) — a physical switch mount needs designing into the
-  Demon Remix carriage anyway.
-- ADXL345 is onboard this variant (PB12/spi2 in the draft) — no external unit.
-- Orbiter filament sensor: wire to the endstop/I2C expansion headers; uncomment the
-  `toolhead_filament`/`toolhead_motion` sections in printer.cfg and verify pins.
+Field evidence (Demon guide, community-tested): **the SV08 MAX ships with Katapult on
+all MCUs** — H750 app lives at `0x08020000` (128KiB offset), and firmware updates go
+over CAN via the standard jump-to-bootloader flow
+([canbus.esoterical.online](https://canbus.esoterical.online) mainboard + toolhead pages).
+
+> ⚠️ **Verify before trusting**: Sovol's shipped `.config` files (preserved on the
+> `sovol-stock-fork` branch) say `FLASH_START_0000` — no bootloader offset — which
+> contradicts the Katapult story (stale factory-direct builds, most likely). First
+> action on the real machine: run the Katapult query
+> (`~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0` after requesting
+> bootloader entry). If no Katapult node ever appears, STOP — fall back to ST-Link /
+> Moffy97 SBC-SWD before flashing anything.
+
+1. Flash order: mainboard H750 first (menuconfig: STM32H750, 128KiB bootloader,
+   25MHz crystal per Demon guide's screenshots, USB-to-CAN bridge on PA11/PA12, CAN
+   PB8/PB9, 1M). Optional GPIO init pins `!PB0,!PE11,!PE14` keep the aux/exhaust/bed
+   fans from blasting at boot — matches Sovol's firmware behavior we reverse-engineered
+   from their `stm32h7.c`; skip if you ever add a chamber heater (boot cooling).
+2. Buffer F103: same flow (F103, CAN PB8/PB9 @1M, Katapult offset per esoterical F103
+   guidance).
+3. **UUIDs change after every flash** (stock firmware hardcoded them; mainline derives
+   real chip IDs): re-run `canbus_query.py` after each node and fill the `TODO_*_UUID`s.
+   Expected nodes: mainboard bridge, buffer, EBB36, Eddy Duo. (No chamber-heater
+   `hot_mcu` on this machine.)
+4. Host MCU (optional, for input-shaper-adjacent features): `make menuconfig` → Linux
+   process → `make flash`; enable `klipper-mcu.service` per the Demon guide.
+5. New toolhead boards flash over USB first (no printer needed): EBB36 via BOOT button
+   (Katapult then Klipper from this fork), Eddy Duo per BTT docs with DIP switch → CAN.
+
+### ⚠️ CAN TERMINATION — before FIRST plug-in of the new toolhead (standing reminder)
+
+Exactly two 120Ω terminators at the two physical bus ends. EBB36 and Eddy Duo both have
+termination jumpers; mainboard + buffer are already on the bus. Power off, measure
+CANH↔CANL: **~60Ω correct**; ~40Ω = three terminators; ~120Ω = one.
+
+### Phase 0.9 — EBB36 jumper checklist (before closing up the toolhead)
+
+- MAX31865 wire-count jumpers → **2-wire** (Rapido PT100 cartridge). Config assumes
+  PT100, 430Ω reference.
+- CAN termination jumper per the topology above.
+- ADXL345 is onboard (PB12/spi2 in the draft) — no external unit.
+- Orbiter filament sensor → endstop/I2C headers; uncomment `toolhead_filament` /
+  `toolhead_motion` sections and verify pins.
 
 ## Phase 1 — First-boot sanity (nothing hot, nothing homed)
 
-In order: `QUERY_ENDSTOPS` (toggle each by hand) → PT100 reads plausible room temp (a
-short/open MAX31865 fault must appear as an error, not a bogus temp) → bed thermistor sane →
-`ACCELEROMETER_QUERY` (ADXL) → eddy responds (check for i2c errors in the log; do not
-calibrate yet) → `STEPPER_BUZZ STEPPER=stepper_x` (and y, z, z1–z3, extruder) for direction —
-flip `dir_pin` polarity where wrong → fans: `M106 S128`, hotend_fan kicks in above 50°C later.
+`QUERY_ENDSTOPS` (toggle each by hand) → PT100 reads plausible room temp (a shorted/open
+MAX31865 must fault, not read garbage) → bed thermistor sane → `ACCELEROMETER_QUERY` →
+eddy responds (no i2c errors in log; don't calibrate yet) → `STEPPER_BUZZ` every stepper
+for direction (flip `dir_pin` where wrong) → fans respond to `M106 S128`.
 
-## Phase 2 — Travel limits & nozzle datum (geometry changed with the toolhead!)
+## Phase 2 — X endstop, travel limits & nozzle datum
 
-The Demon Remix moves the nozzle relative to the carriage, so endstop positions and travel
-limits from stock are stale.
+**Sensorless X is OFF the table**: the mainboard pin definition routes no TMC5160 DIAG
+pin to the H750 (verified from `Motherboard/Mcu_Pin_definition.pdf` — only PD1 (Y) and
+one spare endstop port exist). Use a physical switch; two wiring options:
 
-1. **X endstop decision**: physical microswitch wired to EBB36 (draft assumes `EBBCan:PB6` —
-   verify against the BTT pinout) or TMC5160 sensorless (mainboard DIAG pin needed — check
-   `Motherboard/Mcu_Pin_definition.pdf`). Do this before homing X.
-2. Home X and Y at the reduced `homing_speed: 60`.
-3. **Datum**: jog the nozzle until it is exactly over the bed's front-left corner (bed is a
-   fixed 500×500 datum). The commanded position at that point tells you the offset between
-   the current coordinate system and the bed: adjust `position_endstop` (X and Y) by that
-   delta so the bed spans 0–500 in both axes.
-4. Re-find true `position_min`/`position_max`: jog slowly toward each physical limit,
-   stop ~1mm short, record. Update the config. Re-home and verify the nozzle can reach all
-   four bed corners.
+- **Mainboard `PD6` (recommended)** — the spare endstop port (PD1's unused twin,
+  signal/GND/5V). Mount a stationary microswitch at the gantry's X-min end, triggered
+  by the carriage — keeps the custom carriage adapter completely clean, no switch mount
+  in the CAD. `endstop_pin: ^PD6`.
+- EBB36 endstop header (`^EBBCan:PB6`, verify against BTT pinout) — switch rides the
+  carriage, shortest wiring, needs a mount designed in.
+
+Then re-establish geometry (the Demon Remix moves the nozzle relative to the carriage):
+
+1. Home X and Y at reduced `homing_speed: 60`.
+2. **Datum**: jog the nozzle exactly over the bed's front-left corner; shift
+   `position_endstop` (X and Y) by the observed delta so the bed spans 0–500.
+3. Re-find `position_min`/`position_max` by jogging to ~1mm short of each physical
+   limit. Update config; verify all four corners reachable.
 
 ## Phase 3 — Eddy XY offset (coil vs nozzle)
 
-Key insight: **XY offset needs only ~±1mm accuracy.** It only determines where the coil sits
-when Klipper "probes at" a point — it shifts sample locations, it does not affect Z accuracy.
-
-1. Primary method: measure mechanically. From the Demon Remix CAD (or calipers on the mounted
-   head): coil **center** to nozzle **tip**, X and Y separately. Sign convention:
-   `offset = coil_pos − nozzle_pos` in bed coordinates.
-2. Optional refinement: park ~3mm above an isolated metal feature with a crisp edge (a bed
-   screw head near the bed edge works), and slowly jog X across it while watching the probe
-   frequency/height output; the response is symmetric around the feature center. Repeat in Y.
-3. Enter `x_offset`/`y_offset` in `[probe_eddy_current btt_eddy]`.
+XY offset needs only ~±1mm accuracy (it shifts sample locations; zero effect on Z
+accuracy). Measure mechanically from the Demon Remix CAD or calipers: coil center to
+nozzle tip, per axis; `offset = coil_pos − nozzle_pos`. Optional refinement: scan across
+a bed-screw head watching the frequency response; the response is symmetric around
+center. Enter in `[probe_eddy_current btt_eddy]`.
 
 ## Phase 4 — Eddy Z calibration chain (order matters)
 
-1. `LDC_CALIBRATE_DRIVE_CURRENT CHIP=btt_eddy` — toolhead centered, ~20mm above bed, cold.
-   `SAVE_CONFIG`.
-2. `PROBE_EDDY_CURRENT_CALIBRATE CHIP=btt_eddy` — paper-drag procedure at bed center maps
-   frequency↔height. `SAVE_CONFIG`.
-3. `G28 Z` now works (probe is the virtual Z endstop). Then `PROBE_ACCURACY` — expect
-   single-digit-micron stddev from the LDC1612 at fixed temperature.
-4. `QUAD_GANTRY_LEVEL` — babysit the first run; verify all four probe points land ON the
-   bed with the new offsets before trusting it.
-5. Temperature drift: `TEMPERATURE_PROBE_CALIBRATE PROBE=btt_eddy TARGET=<temp>` per Klipper
-   docs — heat-soak the bed to ~100°C during the procedure so the probe sees a full thermal
-   range.
+Primary path (mainline `probe_eddy_current`):
+1. `LDC_CALIBRATE_DRIVE_CURRENT CHIP=btt_eddy` (centered, ~20mm up, cold) → `SAVE_CONFIG`.
+2. `PROBE_EDDY_CURRENT_CALIBRATE CHIP=btt_eddy` (paper drag) → `SAVE_CONFIG`.
+3. `G28 Z`, then `PROBE_ACCURACY` — expect single-digit-micron stddev at steady temp.
+4. `QUAD_GANTRY_LEVEL` — babysit the first run; confirm all four probe points land on
+   the bed with the new offsets.
+5. `TEMPERATURE_PROBE_CALIBRATE PROBE=btt_eddy TARGET=<temp>` with the bed heat-soaked
+   (~100°C) for drift compensation.
 6. `BED_MESH_CALIBRATE METHOD=rapid_scan` — sanity-check the mesh shape.
+
+Alternative path (eddy-ng, as in the Demon guide): install vvuk/eddy-ng (Phase 0 step 6),
+use the commented `[probe_eddy_ng btt_eddy]` block in printer.cfg instead of
+`[probe_eddy_current]`, and follow https://github.com/vvuk/eddy-ng/wiki/Calibration.
+Gains tap (nozzle-contact Z offset — the successor to Sovol's "virtual contact").
+Note the Demon guide's eddy-ng block targets the STOCK toolhead coil on `extra_mcu`
+(software i2c PB10/PB11 to dodge F103 i2c errata) — with the Eddy Duo those workarounds
+don't apply; use the Duo's own MCU/i2c settings.
 
 ## Phase 4.5 — Buffer variant bench test (feeder MCU on mainline firmware)
 
-1. Start with `buffer-synced.cfg`. With filament loaded, run a long extrude; verify the
-   feeder follows, the push switch toggles the trim (watch rotation-distance responses in
-   the console), and slack stays bounded over several meters.
-2. Simulate a jam (pinch the reverse-Bowden at the spool side): the jam watchdog must PAUSE
-   with `winding_status=True` and blue LED within ~5s of the switch going taut.
-3. Runout chain: withdraw filament at the inlet sensor mid-test-print → green LED off,
-   `CONTINUE_PRINT_D` counts down 1100mm → M600 pause → BUFFER_LONG_UNLOAD spits the tail.
-4. If synced-variant feed quality disappoints, swap the include to `buffer-pushed.cfg` and
-   repeat; additionally verify a mid-print push does NOT stutter XY motion (watch a test
-   print's surface while triggering the switch by hand).
-5. Verify `FORCE_MOVE STEPPER="extruder_stepper filament_buffer" ...` (quoted name) works
-   on this Klipper build — used by manual feed and unload in the synced variant.
+1. Start with `buffer-synced.cfg`: long extrude → feeder follows, push switch toggles
+   the trim, slack stays bounded over several meters.
+2. Jam simulation (pinch the reverse-Bowden at the spool): PAUSE + `winding_status=True`
+   + blue LED within ~5s.
+3. Runout chain: withdraw filament at the inlet sensor → `CONTINUE_PRINT_D` counts down
+   1100mm → M600 → tail spit-out.
+4. If feed quality disappoints, swap the include to `buffer-pushed.cfg`; verify a
+   mid-print push does NOT stutter XY.
+5. Verify `FORCE_MOVE STEPPER="extruder_stepper filament_buffer"` (quoted name) works
+   on this build — used by manual feed and unload in the synced variant.
 
 ## Phase 5 — First-layer Z offset
 
-`z_offset` for eddy probes is the **trigger height** (~2.5mm), not the first-layer squish.
-Dial the real first layer with a test print + `SET_GCODE_OFFSET Z_ADJUST=` (babystepping),
-then persist the result. If you later want nozzle-contact accuracy like Sovol's
-"virtual contact" gave you, evaluate `probe_eddy_ng`'s tap mode as a drop-in upgrade.
+Eddy `z_offset` is trigger height (~2.5mm), not squish. Dial the first layer with a test
+print + babystepping (`SET_GCODE_OFFSET Z_ADJUST=`), persist. On the eddy-ng path, tap
+replaces most of this.
 
 ## Phase 5.5 — PLR power-cut test
 
 1. Slicer start/end gcode must call `PRINT_START` / `PRINT_END`.
-2. Start a sacrificial print, let it reach ~10mm height, kill mains power.
-3. Power on: the Mainsail prompt should offer Resume/Discard. Check
-   `saved_variables.cfg` has a fresh `plr_state` before accepting.
-4. Resume: verify XY homes (Z must NOT home), temps restore, nozzle returns to the
-   journaled XY/Z, and the seam at the resume line is a single band ≤ one layer + 5s
-   of print. Test both an absolute-E and a relative-E (M83) sliced file.
+2. Sacrificial print to ~10mm, kill mains.
+3. On boot: Mainsail prompt offers Resume/Discard; check `plr_state` is fresh first.
+4. Resume: XY homes (Z must NOT), temps restore, nozzle returns to journaled XY/Z, seam
+   ≤ one layer + 5s. Test absolute-E and M83 files. For 30-hour PETG-CF jobs this is
+   the highest-value test on the list.
 
 ## Phase 6 — Dependent recalibrations
 
-- Recompute `[bed_mesh]` bounds from measured offsets:
-  `mesh_min ≥ (position_min + offset, …)` and `≥` bed edge; `mesh_max ≤ (position_max +
-  offset, …)` and `≤ 500`. Enable `scan_overshoot` if X travel allows.
-- `[safe_z_home] home_xy_position = (250 − x_offset, 250 − y_offset)`.
-- `PID_CALIBRATE HEATER=extruder TARGET=250` (Rapido at working temp), then bed.
-- Verify Orbiter `rotation_distance`: mark filament, extrude 100mm at 150°C+, measure,
-  scale 4.637 accordingly.
-- `SHAPER_CALIBRATE` with the ADXL; expect different peaks than stock (new toolhead mass).
-- Pressure advance tower for the Rapido UHF (start 0.02–0.03).
-- Only now consider raising `max_accel` from 20000 toward stock's 40000 — watch for
-  "Timer too close" errors, which Sovol's firmware masked but mainline reports honestly.
+- Recompute `[bed_mesh]` bounds from measured offsets; enable `scan_overshoot` if X
+  travel allows. `[safe_z_home] home_xy_position = (250 − x_offset, 250 − y_offset)`.
+- `PID_CALIBRATE` hotend (target 250+ for PETG-CF) then bed.
+- Verify Orbiter `rotation_distance` (100mm mark test), `SHAPER_CALIBRATE` (new toolhead
+  mass), pressure advance for PETG-CF (start ~0.03–0.05; CF blunts it).
+- Only then raise `max_accel` from 20000 toward stock's 40000 — watch for "Timer too
+  close" (Sovol masked it; mainline reports honestly).
+
+## Recovery (if a flash goes wrong)
+
+- Klipper app reflash via ST-Link: correct build at start address `0x08020000` (H750).
+- Overwritten bootloader: rebuild Katapult with `|| MACH_STM32H750` added to its
+  `src/stm32/Kconfig` (128KiB section AND the flash-settings block at the bottom),
+  full chip erase, Katapult at `0x08000000`, then Klipper at `0x08020000` — per the
+  Demon guide's recovery section.
+- Toolhead/buffer F103s: Moffy97 SBC-as-SWD method, no ST-Link needed.
+- Nuclear option: swap in the spare pre-flashed Sovol eMMC.
