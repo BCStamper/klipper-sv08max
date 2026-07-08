@@ -39,18 +39,28 @@ STM32CubeProgrammer (on hand); config backup untouched;
 
 ## Phase 0.75 — MCU flashing over CAN (no ST-Link happy path)
 
-Field evidence (Demon guide, community-tested): **the SV08 MAX ships with Katapult on
-all MCUs** — H750 app lives at `0x08020000` (128KiB offset), and firmware updates go
-over CAN via the standard jump-to-bootloader flow
-([canbus.esoterical.online](https://canbus.esoterical.online) mainboard + toolhead pages).
+**CONFIRMED — Katapult is Sovol's own update mechanism.** The stock image ships
+`~/printer_data/build/` containing Katapult's `flash_can.py` plus per-MCU update
+scripts that jump each MCU into its bootloader and flash it (this is how Sovol OTA
+works). H750 app lives at `0x08020000` (128KiB offset); flashing follows the standard
+flow ([canbus.esoterical.online](https://canbus.esoterical.online) mainboard +
+toolhead pages). Details learned from those vendor scripts:
 
-> ⚠️ **Verify before trusting**: Sovol's shipped `.config` files (preserved on the
-> `sovol-stock-fork` branch) say `FLASH_START_0000` — no bootloader offset — which
-> contradicts the Katapult story (stale factory-direct builds, most likely). First
-> action on the real machine: run the Katapult query
-> (`~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0` after requesting
-> bootloader entry). If no Katapult node ever appears, STOP — fall back to ST-Link /
-> Moffy97 SBC-SWD before flashing anything.
+- The **H750's Katapult presents as USB serial** (`/dev/serial/by-id/usb-katapult_stm32h750xx_*`)
+  after the jump — flash the mainboard over USB with `flash_can.py -f <bin> -d <that device>`.
+- **CAN nodes get a DIFFERENT UUID in Katapult mode** (bootloader uses the real chip ID;
+  Sovol's app hardcodes fake ones). After jumping a node, re-query and flash the
+  *newly detected* UUID — exactly what Sovol's own scripts do.
+- The vendor bundle has scripts for the mainboard + two CAN nodes but **none for the
+  buffer MCU** — same factory process almost certainly applies, but it's the one node
+  without vendor-tooling proof. It's also the node Moffy97's SBC-SWD recovery covers.
+- Sovol's shipped `.config` files (on `sovol-stock-fork`) say `FLASH_START_0000` —
+  stale factory-direct builds; production firmware is offset-linked. Ignore them for
+  offsets; mirror them only for pin/feature selections.
+
+> Residual sanity check on the real machine before first flash: confirm
+> `~/printer_data/build/flash_can.py` and the `*_update_fw.sh` scripts exist on YOUR
+> unit (SSH checklist). If that directory is missing, stop and reassess.
 
 1. Flash order: mainboard H750 first (menuconfig: STM32H750, 128KiB bootloader,
    25MHz crystal per Demon guide's screenshots, USB-to-CAN bridge on PA11/PA12, CAN
@@ -94,14 +104,12 @@ for direction (flip `dir_pin` where wrong) → fans respond to `M106 S128`.
 
 **Sensorless X is OFF the table**: the mainboard pin definition routes no TMC5160 DIAG
 pin to the H750 (verified from `Motherboard/Mcu_Pin_definition.pdf` — only PD1 (Y) and
-one spare endstop port exist). Use a physical switch; two wiring options:
-
-- **Mainboard `PD6` (recommended)** — the spare endstop port (PD1's unused twin,
-  signal/GND/5V). Mount a stationary microswitch at the gantry's X-min end, triggered
-  by the carriage — keeps the custom carriage adapter completely clean, no switch mount
-  in the CAD. `endstop_pin: ^PD6`.
-- EBB36 endstop header (`^EBBCan:PB6`, verify against BTT pinout) — switch rides the
-  carriage, shortest wiring, needs a mount designed in.
+one spare endstop port exist). Physical switch required; **DECIDED: EBB36 endstop
+header (`^EBBCan:PB6`, verify against BTT pinout)** — switch rides the toolhead
+(ordered), mount designed into the Demon Remix adapter, keeps toolhead sensors on the
+toolhead board. Documented alternative if the mount gets crowded: mainboard `PD6`
+(the spare endstop port, PD1's unused twin) with a stationary switch at the gantry's
+X-min end.
 
 Then re-establish geometry (the Demon Remix moves the nozzle relative to the carriage):
 

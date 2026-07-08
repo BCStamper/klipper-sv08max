@@ -85,21 +85,23 @@ Everything else is config against stable user-facing interfaces.
 - `sovol-stock-fork` — faithful reconstruction of Sovol's shipped fork on its true base
   (mainline `a91d8a66f`, found by full-tree blob matching) for diffing. Also preserves
   Sovol's MCU build configs (note: their `FLASH_START_0000` contradicts the
-  Katapult-preinstalled field evidence — treat those files as stale factory-direct
-  builds and verify Katapult on your unit before flashing; see BRINGUP Phase 0.75).
+  Katapult-preinstalled evidence — stale factory-direct builds; mirror them for
+  pin/feature selections only, never for flash offsets; see BRINGUP Phase 0.75).
 
 Hardware facts: mainboard STM32H750 (USB-to-CAN bridge, app at 0x08020000), toolhead +
 buffer STM32F103 (CAN PB8/PB9), all CAN at 1M. Stock firmware hardcodes CAN UUIDs —
-re-query after every flash. Mainboard has a spare endstop port on **PD6** (X endstop
-option; no TMC5160 DIAG routing exists, so sensorless homing is not available).
-No chamber heater on this machine (`hot_mcu` sections intentionally absent).
+re-query after every flash (Katapult mode reports a different, real-chip-ID UUID).
+X endstop: physical switch on the EBB36 endstop header (decided; sensorless is
+impossible — no TMC5160 DIAG routing; mainboard PD6 spare endstop port is the
+documented alternative). No chamber heater on this machine (`hot_mcu` intentionally
+absent).
 
 ## Status
 
 - [x] Buffer rebuilt as config, both variants drafted
 - [x] PLR rebuilt as config + shell (script smoke-tested)
-- [x] Flash procedure identified (Demon method — Katapult preinstalled, no ST-Link)
-- [ ] Verify Katapult actually present on this unit (BRINGUP Phase 0.75 caveat)
+- [x] Flash procedure CONFIRMED: Katapult is Sovol's own OTA mechanism
+      (`~/printer_data/build/flash_can.py` + vendor update scripts; see BRINGUP 0.75)
 - [ ] Bench test: EBB36 + Eddy Duo on CAN
 - [ ] Bench test: buffer variants on the feeder MCU (pick winner)
 - [ ] Power-cut PLR test
