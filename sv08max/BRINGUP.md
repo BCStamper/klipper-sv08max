@@ -54,9 +54,20 @@ toolhead pages). Details learned from those vendor scripts:
 - The vendor bundle has scripts for the mainboard + two CAN nodes but **none for the
   buffer MCU** — same factory process almost certainly applies, but it's the one node
   without vendor-tooling proof. It's also the node Moffy97's SBC-SWD recovery covers.
+  **Confirmed on-unit (2026-07-07)**: dpkg + UUID grep across the 2.1.9 system show NO
+  vendor update path for the buffer MCU anywhere — factory-flashed once, never OTA'd.
+  Katapult on it is inferred from the uniform factory process, unproven until we jump
+  it. Flash it LAST, after the mainboard and toolhead prove the flow.
 - Sovol's shipped `.config` files (on `sovol-stock-fork`) say `FLASH_START_0000` —
   stale factory-direct builds; production firmware is offset-linked. Ignore them for
   offsets; mirror them only for pin/feature selections.
+- **Vendor services at cutover**: the host stack is one deb (`zhongchuang-client`,
+  provides the enabled `makerbase-client.service`, which spawns `ota_service.sh` and
+  the touchscreen glue). At cutover: `sudo systemctl disable --now makerbase-client`
+  — then decide the touchscreen's fate (open question: does the stock serial screen
+  do anything useful against mainline? Check DKEU docs/Discord). ⚠️ Before cutover,
+  do NOT trigger a screen-initiated update: the OTA endpoint currently serves a TEST
+  manifest for a different printer, and the updater installs on any version mismatch.
 
 > ✅ **VERIFIED on the target unit (2026-07-07, SSH):** `flash_can.py` + all three
 > `*_update_fw.sh` present in `~/printer_data/build/`; Sovol system version 2.1.9;
