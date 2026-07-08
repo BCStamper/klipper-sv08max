@@ -20,7 +20,13 @@ STM32CubeProgrammer (on hand); config backup untouched;
 
 ## Phase 0 — Host conversion (stock image, Demon method)
 
-1. **Backup**: download `/config` untouched; keep the spare eMMC sealed.
+> **One-shot flashing policy (user decision, 2026-07-08)**: nothing gets flashed ahead
+> of time — no pre-baked binaries, no early bench flashes. ALL MCU flashing happens in
+> the single cutover session, in the order written here, so what's-done-vs-pending is
+> always obvious from where you are in this document.
+
+1. **Backup**: download `/config` untouched (done 2026-07-08 → `live-backup/` locally;
+   contains the Obico token — never push unscrubbed); keep the spare eMMC sealed.
 2. KIAUH: `cd kiauh && git pull`, run `~/kiauh/kiauh.sh`.
 3. **Point KIAUH at OUR fork** (Settings `S`): repo
    `https://github.com/BCStamper/klipper-sv08max`, branch `sv08max-master`.
@@ -63,11 +69,17 @@ toolhead pages). Details learned from those vendor scripts:
   offsets; mirror them only for pin/feature selections.
 - **Vendor services at cutover**: the host stack is one deb (`zhongchuang-client`,
   provides the enabled `makerbase-client.service`, which spawns `ota_service.sh` and
-  the touchscreen glue). At cutover: `sudo systemctl disable --now makerbase-client`
-  — then decide the touchscreen's fate (open question: does the stock serial screen
-  do anything useful against mainline? Check DKEU docs/Discord). ⚠️ Before cutover,
-  do NOT trigger a screen-initiated update: the OTA endpoint currently serves a TEST
-  manifest for a different printer, and the updater installs on any version mismatch.
+  drives the stock serial panel on /dev/ttyS4). At cutover:
+  `sudo systemctl disable --now makerbase-client` — the stock serial panel retires
+  with it. **Screen plan (decided 2026-07-08)**: add an HDMI touchscreen running
+  KlipperScreen post-cutover — lowest friction and upstream-maintained; the
+  KlipperScreen install already on the image finally earns its keep (verify the
+  host board's physical HDMI port and the currently-vestigial service:
+  `systemctl status KlipperScreen`). Stretch option shelved for a rainy day: the
+  serial protocol is documented in the zhongchuang client source, and a spare 7"
+  Nextion exists on the bench. ⚠️ Before cutover, do NOT trigger a screen-initiated
+  update: the OTA endpoint currently serves a TEST manifest for a different printer,
+  and the updater installs on any version mismatch.
 
 > ✅ **VERIFIED on the target unit (2026-07-07, SSH):** `flash_can.py` + all three
 > `*_update_fw.sh` present in `~/printer_data/build/`; Sovol system version 2.1.9;
