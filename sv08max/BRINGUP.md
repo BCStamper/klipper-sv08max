@@ -58,9 +58,18 @@ toolhead pages). Details learned from those vendor scripts:
   stale factory-direct builds; production firmware is offset-linked. Ignore them for
   offsets; mirror them only for pin/feature selections.
 
-> Residual sanity check on the real machine before first flash: confirm
-> `~/printer_data/build/flash_can.py` and the `*_update_fw.sh` scripts exist on YOUR
-> unit (SSH checklist). If that directory is missing, stop and reassess.
+> ✅ **VERIFIED on the target unit (2026-07-07, SSH):** `flash_can.py` + all three
+> `*_update_fw.sh` present in `~/printer_data/build/`; Sovol system version 2.1.9;
+> can0 up at 1M; all three CAN MCU nodes alive (mainboard fw `aeb4421-dirty`
+> 2025-04-02, toolhead + buffer `cc8afd8-dirty` 2025-03-10/11 — vendor-built bins).
+> Notes: `/dev/serial/by-id/` not existing during normal operation is EXPECTED (the
+> H750 runs as a gs_usb CAN bridge, a network device — the
+> `usb-katapult_stm32h750xx` serial device only appears after a bootloader jump).
+> The unit's `~/klipper/.config` also says `FLASH_START_0000` — non-authoritative,
+> same stale pattern as the published snapshot; the running bins were built on
+> Sovol's infrastructure and delivered prebuilt. Unit is on 2.1.9 vs the published
+> source snapshot's 2.0.1: back up the LIVE config before cutover, as it may have
+> drifted from the snapshot this branch's configs were derived from.
 
 1. Flash order: mainboard H750 first (menuconfig: STM32H750, 128KiB bootloader,
    25MHz crystal per Demon guide's screenshots, USB-to-CAN bridge on PA11/PA12, CAN
