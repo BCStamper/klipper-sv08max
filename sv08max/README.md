@@ -41,6 +41,21 @@ Branch: sv08max-master
 Then remove Sovol Klipper and install as usual. Deploy `sv08max/*.cfg` + `plr.sh` into
 `~/printer_data/config/`.
 
+## Two-stage migration (see BRINGUP.md — it is the runbook)
+
+- **Stage 1**: mainline cutover with the STOCK toolhead. Deploy
+  **`printer-stock-toolhead.cfg` as `printer.cfg`** — a self-contained config for the
+  factory toolhead (eddy-ng on the stock coil via software i2c, stock pins/geometry,
+  buffer + PLR included). It is also the **permanent fallback** whenever the stock
+  toolhead goes back on.
+- **Stage 2**: swap to the Demon Remix / EBB36 / Eddy Duo toolhead; deploy the repo's
+  `printer.cfg` (the new-toolhead config).
+
+Probe stack is **eddy-ng in both stages** (tap = nozzle-contact Z, self-corrects for
+CF nozzle wear). eddy-ng ships MCU-side code: install it on the host BEFORE building
+any MCU firmware. The vendor screen client (`makerbase-client`) intentionally stays
+running post-cutover — it's a Moonraker API client and a future integration hook.
+
 ## The filament buffer, rebuilt as config
 
 Two interchangeable variants (include exactly one from `printer.cfg`):
@@ -101,8 +116,10 @@ absent).
 - [x] Buffer rebuilt as config, both variants drafted
 - [x] PLR rebuilt as config + shell (script smoke-tested)
 - [x] Flash procedure CONFIRMED: Katapult is Sovol's own OTA mechanism
-      (`~/printer_data/build/flash_can.py` + vendor update scripts; see BRINGUP 0.75)
-- [ ] Bench test: EBB36 + Eddy Duo on CAN
-- [ ] Bench test: buffer variants on the feeder MCU (pick winner)
-- [ ] Power-cut PLR test
-- [ ] Full bring-up per `BRINGUP.md`
+      (`~/printer_data/build/flash_can.py` + vendor update scripts; verified on-unit)
+- [x] Stage-1 config drafted (`printer-stock-toolhead.cfg`, doubles as permanent fallback)
+- [x] eddy-ng chosen as the probe stack for both stages (Duo support confirmed upstream)
+- [ ] STAGE 1: cutover with stock toolhead (flash 3 MCUs, eddy-ng cal, buffer pick,
+      PLR test, screen observation) — exit: printing on mainline
+- [ ] STAGE 2: toolhead swap (EBB36 + Eddy Duo flash, CAN termination check, datum,
+      offsets, eddy-ng cal #2, recalibration cascade)
