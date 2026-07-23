@@ -147,6 +147,32 @@ Print big things here as long as you like — Stage 2 waits until you're bored.
 
 ---
 
+# STAGE 1.5 (optional, future) — DKEU macro pack
+
+[Demon Klipper Essentials Unified](https://github.com/3DPrintDemon/Demon_Klipper_Essentials_Unified)
+layers on AFTER Stage 1 exit criteria pass and BEFORE Stage 2 — macro-integration
+bugs stay isolated from hardware bugs, and this is the config state DKEU's own
+SV08 MAX docs target. (Support his Patreon — we're standing on his flash guide too.)
+
+**Collision map (verified against the repo 2026-07-08):**
+
+| Macro | Owner | Action |
+|---|---|---|
+| `PAUSE` / `RESUME` / `CANCEL_PRINT` | **ours** | No conflict — DKEU doesn't define them; feeder-aware versions stay |
+| `M106` / `M107` | **ours** (stage-1 dual-fan map) | No conflict |
+| `PRINT_START` / `START_PRINT` | **DKEU** | Their orchestration wins (heat soak, QGL, adaptive mesh, purge). Move our hooks — PLR journal start, `was_interrupted`, `save_last_file`, `BUFFER_SYNC` — into DKEU's user-hook files (`Demon_User_Files`); slicer start-gcode switches to DKEU's call |
+| `PRINT_END` | **DKEU** + hooks | Same treatment: journal stop, flag clear, `BUFFER_DESYNC`, plr_clear |
+| `LOAD_FILAMENT` / `UNLOAD_FILAMENT` | **ours** | Buffer choreography must win — disable/rename DKEU's or wire theirs to call ours |
+| `M600` | **ours** | The `CONTINUE_PRINT_D` 1100mm tail chain depends on it — keep ours; disable DKEU's |
+
+Also per the Demon mainline guide: disable the obsolete macro in the DKEU
+custom_expansion file (his instructions link). After Stage 2, expect a small DKEU
+re-tune pass — purge/park coordinates and probe-adjacent settings move with the
+new toolhead geometry. Re-run the Stage 1 buffer/PLR tests after integrating
+(the macro layer changed under them).
+
+---
+
 # STAGE 2 — New toolhead swap (proven foundation underneath)
 
 ## 2.0 Pre-swap bench + bus work
