@@ -8,7 +8,7 @@ Eddy Duo (CAN) / Phaetus Rapido 2 UHF Plus (PT100) / LDO Orbiter v2.5.
 
 Install path: **3DPrintDemon's "Mainline Your MAX" method** (stock Sovol eMMC kept,
 Klipper swapped via KIAUH, MCUs flashed over CAN — Katapult ships preinstalled on MAX
-MCUs), with KIAUH pointed at THIS fork instead of upstream. See `BRINGUP.md` for the
+MCUs), with KIAUH pointed at THIS fork instead of upstream. See `docs/` (via `BRINGUP.md`) for the
 full sequence and the Demon guide in
 `3DPrintDemon/Demon_Klipper_Essentials_Unified` for the method's origin — consider
 supporting his Patreon.
@@ -41,15 +41,17 @@ Branch: sv08max-master
 Then remove Sovol Klipper and install as usual. Deploy `sv08max/*.cfg` + `plr.sh` into
 `~/printer_data/config/`.
 
-## Two-stage migration (see BRINGUP.md — it is the runbook)
+## Staged migration — the runbook is `docs/` (index: BRINGUP.md)
 
-- **Stage 1**: mainline cutover with the STOCK toolhead. Deploy
-  **`printer-stock-toolhead.cfg` as `printer.cfg`** — a self-contained config for the
-  factory toolhead (eddy-ng on the stock coil via software i2c, stock pins/geometry,
-  buffer + PLR included). It is also the **permanent fallback** whenever the stock
-  toolhead goes back on.
-- **Stage 2**: swap to the Demon Remix / EBB36 / Eddy Duo toolhead; deploy the repo's
-  `printer.cfg` (the new-toolhead config).
+Four work sessions, one numbered doc each, each with the what/why/how:
+**[01 mainline cutover](sv08max/docs/01-MAINLINE-CUTOVER.md)** (stock toolhead stays;
+deploy **`printer-stock-toolhead.cfg` as `printer.cfg`** — also the permanent
+fallback) → **[02 DKEU](sv08max/docs/02-DKEU-INTEGRATION.md)** (macro pack, verified
+collision map) → **[03 validation](sv08max/docs/03-STOCK-VALIDATION.md)** (buffer
+pick, PLR power-cut, screen evaluation) → **[04 toolhead
+changeover](sv08max/docs/04-TOOLHEAD-CHANGEOVER.md)** (EBB36/Eddy Duo; deploy the
+repo's `printer.cfg`). Overview, hardware facts, and the decision log live in
+**[00](sv08max/docs/00-OVERVIEW.md)**.
 
 Probe stack is **eddy-ng in both stages** (tap = nozzle-contact Z, self-corrects for
 CF nozzle wear). eddy-ng ships MCU-side code: install it on the host BEFORE building
@@ -101,7 +103,7 @@ Everything else is config against stable user-facing interfaces.
   (mainline `a91d8a66f`, found by full-tree blob matching) for diffing. Also preserves
   Sovol's MCU build configs (note: their `FLASH_START_0000` contradicts the
   Katapult-preinstalled evidence — stale factory-direct builds; mirror them for
-  pin/feature selections only, never for flash offsets; see BRINGUP Phase 0.75).
+  pin/feature selections only, never for flash offsets; see docs/01, section B).
 
 Hardware facts: mainboard STM32H750 (USB-to-CAN bridge, app at 0x08020000), toolhead +
 buffer STM32F103 (CAN PB8/PB9), all CAN at 1M. Stock firmware hardcodes CAN UUIDs —
