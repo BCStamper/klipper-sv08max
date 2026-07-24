@@ -60,6 +60,20 @@ suspect is the macro integration.
 | Chamber heater | Not fitted on this machine — no `hot_mcu` anywhere |
 | Screen | Serial HMI panel on `/dev/ttyS4` driven by `makerbase-client` (Moonraker API client). **Stays running** — future integration hook. KlipperScreen on the image is vestigial (no display attached); an HDMI touchscreen later is the penciled-in upgrade |
 
+## Repo & directory map (when lost, start here)
+
+| Where | What it is |
+|---|---|
+| **[BCStamper/klipper-sv08max](https://github.com/BCStamper/klipper-sv08max)** | **THE project.** Klipper fork; branch `sv08max-master` (default) = upstream master + 2-file delta + the `sv08max/` overlay and these docs. `sv08max-mainline` = old v0.13.0 module-port fallback (never merge past v0.13.0). `sovol-stock-fork` = faithful reconstruction of Sovol's fork for diffing. `master` = clean upstream tracking |
+| [BCStamper/sv08max-reference-docs](https://github.com/BCStamper/sv08max-reference-docs) | Vendor reference fork (was named `SV08MAX` — renamed 2026-07-09 to end the confusion; old URLs redirect). PDFs, CAD, pin maps, Sovol's shipped-image snapshot. Nothing here runs on the printer |
+| Local `References/SV08MAX` | Clone of the reference-docs repo (folder keeps the old name). Also holds `live-backup/` — local-only, gitignored, contains the Obico token |
+| Local `References/klipper` | Working clone where the fork's branches are built (`origin` = Klipper3d, `fork` = klipper-sv08max) |
+| Local `References/Rappetor-SV08-Mainline` | Community guide for the REGULAR SV08 (renamed from the misleading `Mainline_MAX`) — reference only |
+| The printer | `sovol@192.168.8.243` (SPI-XI, via Tailscale subnet) |
+
+Rule of thumb: **if it configures or runs the printer, it lives in klipper-sv08max;
+if it documents Sovol's hardware, it lives in reference-docs.**
+
 ## Standing warnings
 
 - ⚠ **Never tap update/OTA on the touchscreen.** The vendor endpoint currently
