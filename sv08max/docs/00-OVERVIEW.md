@@ -23,9 +23,15 @@ toolhead. Workload target: long (30hr) PETG-CF prints. **Reliability > features.
 - **PLR rebuilt as config + shell, zero core patches** — journals byte offset + state
   to `save_variables` every 5s; `plr.sh` regenerates a resume file. More robust seek
   than Sovol's (byte offset vs text match), loses ≤5s of print.
-- **eddy-ng as the probe stack, both toolheads** — tap gives nozzle-contact Z that
-  self-corrects for CF-induced nozzle wear (a drifting-first-layer killer on this
-  workload). One stack, two coils: stock Sovol coil (doc 01), Eddy Duo (doc 04).
+- **eddy-ng was the plan, both toolheads — currently deferred on Stage 1.** Tap
+  gives nozzle-contact Z that self-corrects for CF-induced nozzle wear (a
+  drifting-first-layer killer on this workload), which is why it was chosen
+  originally. eddy-ng has a confirmed upstream bug (vvuk/eddy-ng#146) that blocks
+  first-time Z homing on current Klipper master — the stock toolhead (doc 01) uses
+  mainline `probe_eddy_current` instead, no tap, manual recalibration every
+  5-10kg of CF as the substitute. Full incident writeup in `01-DIVERGENCES.md`.
+  Re-evaluate eddy-ng specifically when Stage 2 (Eddy Duo, doc 04) starts —
+  nothing between now and then needs a decision either way.
 - **Staged migration** — each doc changes ONE layer, so every failure has an obvious
   suspect: 01 = software, 02 = macros, 03 = nothing (validation only), 04 = new
   hardware.
@@ -45,6 +51,12 @@ Why DKEU (02) comes *before* full validation (03): the test battery then exercis
 the final macro stack once, instead of twice. Fault isolation is preserved by the
 smoke test at the end of 01 — if 02 breaks something the smoke test passed, the
 suspect is the macro integration.
+
+Doc 01's actual execution diverged from its original instructions in several real
+ways (a Z-crash, an eddy-ng abandonment, a bed-plate-not-seated mesh scare, an
+unresolved fan bug) — doc 01 itself has already been corrected to reflect all of
+it; **[01-DIVERGENCES.md](01-DIVERGENCES.md)** is the narrative of why, kept
+separate so the instructions stay short and the reasoning isn't lost.
 
 ## Hardware facts (established by analysis + on-unit verification)
 
@@ -91,6 +103,7 @@ if it documents Sovol's hardware, it lives in reference-docs.**
 | 2026-07-02 | Mainline migration; GitHub fork created |
 | 2026-07-07 | Track master (motion_queuing); buffer as pure config (AFC pattern study); PLR restored, poller design; Demon flash method adopted; EBB36 PB6 X endstop |
 | 2026-07-08 | Staged migration (this doc set); eddy-ng both stages; makerbase-client stays; one-shot flashing per stage; DKEU added as its own stage; HDMI/KlipperScreen penciled for the future |
+| 2026-07-26 | Doc 01 executed. Real Z-crash (missing travel-to-center step, now fixed in doc 01); gantry racking hand-corrected; **eddy-ng abandoned for Stage 1 — confirmed via direct source read to hit vvuk/eddy-ng#146, neither `main` nor `eng-work` fixes it; switched to mainline `probe_eddy_current`, no tap for now**; bed mesh false-cliffs traced to an unseated bed plate, not sensor/config; first print canceled over an unresolved hotend-fan-on-cancel bug; buffer-synced.cfg showed its first positive real-world signal. Full story: `01-DIVERGENCES.md`. Confirmed (by reading DKEU's source) that DKEU has first-class, explicit support for `probe_eddy_current` under our exact object name — the eddy-ng abandonment does not block doc 02. |
 
 ## Safety nets (all stages)
 
@@ -101,6 +114,8 @@ STM32CubeProgrammer (on hand) · live config backup taken 2026-07-08 ·
 Katapult rebuild needs `|| MACH_STM32H750` in its Kconfig (128KiB + flash-settings
 sections), erase, `0x08000000`.
 
-Credit where due: the flash method and the stock-coil eddy-ng config come from
+Credit where due: the flash method comes from
 [3DPrintDemon's guide](https://github.com/3DPrintDemon/Demon_Klipper_Essentials_Unified)
-— support his Patreon.
+— support his Patreon. (His stock-coil eddy-ng config shaped the original Stage 1
+draft; superseded by mainline `probe_eddy_current` per the eddy-ng bug above, but
+the flash method stands unchanged.)

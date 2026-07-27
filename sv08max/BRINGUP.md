@@ -6,7 +6,8 @@ overview; open exactly one numbered doc per session and work top to bottom.
 | Doc | Session | Status |
 |---|---|---|
 | [00 — Overview](docs/00-OVERVIEW.md) | What/why of the whole project, hardware facts, decision log, safety nets | reference |
-| [01 — Mainline cutover](docs/01-MAINLINE-CUTOVER.md) | Fork onto the host, flash the 3 existing MCUs, eddy-ng on stock coil, smoke test | ☐ |
+| [01 — Mainline cutover](docs/01-MAINLINE-CUTOVER.md) | Fork onto the host, flash the 3 existing MCUs, `probe_eddy_current` on stock coil, smoke test | 🟡 mostly done — one open bug (hotend fan on `CANCEL_PRINT`), see doc's Section E |
+| [01-DIVERGENCES](docs/01-DIVERGENCES.md) | Narrative: what actually happened vs. the plan during 01, incl. the eddy-ng decision | reference |
 | [02 — DKEU integration](docs/02-DKEU-INTEGRATION.md) | Macro pack + collision resolution + hook migration | ☐ |
 | [03 — Stock validation](docs/03-STOCK-VALIDATION.md) | Buffer variant pick, PLR power-cut test, runout chain, screen evaluation → exit criteria | ☐ |
 | [04 — Toolhead changeover](docs/04-TOOLHEAD-CHANGEOVER.md) | EBB36 + Eddy Duo + Demon Remix: flash, CAN termination, datum, offsets, calibration cascade | ☐ |
