@@ -33,3 +33,18 @@ but once `BUFFER_SYNC` was restored for `LOAD_FILAMENT`/`UNLOAD_FILAMENT`'s own
 use, the same guards started firing again and synced the buffer to the extruder
 motion queue for entire prints — the exact bug the discrete-push redesign in
 `sv08max/buffer-synced.cfg` exists to eliminate.
+
+## `demon_core_assets_v2.3.5.cfg`
+Two patches:
+1. `[gcode_macro M600]` commented out (search "DISABLED 2026-08-16"). Was
+   silently winning over our own `M600` in `sv08max/macros.cfg` (the 1100mm
+   `CONTINUE_PRINT_D` runout tail chain depends on ours) — same last-file-wins
+   class as the `LOAD_FILAMENT`/`UNLOAD_FILAMENT` shadow above, found via a
+   systematic collision audit across all 28 actively-included config files.
+2. `_DEMON_START_WATCHER` given a missing `{% set svv = printer.save_variables.variables %}`
+   line (search "PATCHED 2026-08-17"). Every other DKEU macro using `svv` sets
+   it first; this one watchdog didn't, so it crashed on its own first check on
+   every single print start (`jinja2.exceptions.UndefinedError: 'svv' is
+   undefined`), which then led to a real Klipper shutdown a few seconds later
+   instead of the intended graceful e-stop. Found via a klippy.log review;
+   confirmed it fired 3 times on 2026-08-16 alone.
