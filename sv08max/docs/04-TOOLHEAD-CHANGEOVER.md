@@ -34,8 +34,10 @@ config (its firmware is already mainline from doc 01).
 ## B. The swap
 
 1. [ ] Power off. Remove stock toolhead (label its harness — it's the fallback).
-2. [ ] Mount the new toolhead; route CAN + power; Orbiter filament sensor to the
-       EBB36 headers if wiring it now.
+2. [ ] Mount the new toolhead; route CAN + power. Mount the Orbiter Smart Sensor
+       on the extruder now too (easiest while it's already apart) — its Klipper
+       wiring/config is deliberately deferred past this doc, see
+       `04-ORBITER-SMART-SENSOR.md`.
 
 ## C. ⚠ CAN TERMINATION — the standing reminder lands here
 
@@ -94,7 +96,9 @@ nodes and re-shapes the topology.*
 ## H. Systems re-verify (quick — they didn't change, their neighbor did)
 
 - [ ] One jam poke, one runout dry-run, one short power-cut resume
-- [ ] Orbiter filament sensor sections uncommented + pins verified, runout pauses
+
+*(Orbiter Smart Sensor re-verify intentionally not here — see
+`04-ORBITER-SMART-SENSOR.md`, wired in as its own deliberate follow-up.)*
 
 ## I. Recalibration cascade
 
