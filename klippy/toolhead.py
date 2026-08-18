@@ -113,7 +113,17 @@ class Move:
         self.cruise_t = cruise_d / cruise_v
         self.decel_t = decel_d / ((end_v + cruise_v) * 0.5)
 
-LOOKAHEAD_FLUSH_TIME = 0.150
+# SV08 MAX 2026-08-18: bumped to match Sovol's stock fork (verified against
+# both home/sovol/klipper -- the actual pre-cutover machine snapshot -- and
+# the sovol-stock-fork branch, which agree exactly). Vanilla's smaller margins
+# gave print_stall=32 partway through a real print that ran fine on stock;
+# these three constants are confirmed to still play the identical role in
+# current code (traced through _check_pause/_check_priming_state) despite the
+# motion_queuing rework changing everything around them. Host-only, no MCU
+# reflash needed. Known tradeoff: BUFFER_TIME_HIGH also governs how much
+# already-queued motion keeps playing out after a PAUSE before the toolhead
+# actually stops -- accepted, there's slack in the PTFE runs to absorb it.
+LOOKAHEAD_FLUSH_TIME = 0.250
 
 # Class to track a list of pending move requests and to facilitate
 # "look-ahead" across moves to reduce acceleration between moves.
@@ -192,8 +202,8 @@ class LookAheadQueue:
         # Check if enough moves have been queued to reach the target flush time.
         return self.junction_flush <= 0.
 
-BUFFER_TIME_HIGH = 1.0
-BUFFER_TIME_START = 0.250
+BUFFER_TIME_HIGH = 4.0
+BUFFER_TIME_START = 0.800
 PRIMING_CMD_TIME = 0.100
 
 # Main code to track events (and their timing) on the printer toolhead
