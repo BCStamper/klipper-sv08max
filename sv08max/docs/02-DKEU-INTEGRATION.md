@@ -16,6 +16,10 @@ explicitly recognizes `probe_eddy_current eddy` as first-class, `demon_z_calibra
 already branches correctly for it too. Full finding in `01-DIVERGENCES.md`.
 **Changes**: config/macros only. No firmware, no hardware. Rollback = remove the
 includes.
+**Actual execution diverged hard from this doc** — a live reinstall to v3.2.2
+wiped every patch below, and reaching an actual working print took root-causing
+roughly a dozen bugs, most of them one recurring mismatch wearing different
+clothes. Full account: **[02-DIVERGENCES.md](02-DIVERGENCES.md)**.
 
 ## Prerequisites
 
@@ -33,7 +37,22 @@ includes.
        current).
 2. [ ] Per Demon's mainline-MAX guide: **disable the obsolete macro in the DKEU
        custom_expansion file** (his guide links it; it exists for the stock Sovol
-       vir-contact stack we don't run).
+       vir-contact stack we don't run). Concretely, this means NOT calling
+       `_OFFSET_FORCE_OVERLAY` from `_CUSTOM_PRE_LEVEL` despite his guide marking
+       it "REQUIRED" — confirmed 2026-08-19 it unconditionally calls
+       `RUN_PROBE_VIR_CONTACT` (a Sovol-vendor-fork command that doesn't exist in
+       mainline `probe_eddy_current`) and `CLEAN_NOZZLE` with no hardware guard.
+       See `02-DIVERGENCES.md`.
+
+⚠ **The installer does a fresh `git clone` every time it runs — it does NOT merge
+or preserve local patches.** Anything patched directly inside
+`Demon_Klipper_Essentials_Unified` is silently overwritten back to pristine
+upstream on every reinstall/update; `Demon_User_Files` at least gets archived to
+`Previous_Versions/` first rather than discarded outright, but is still reset to
+template defaults (customizations like `ceal_master_enable` and the PLR hooks
+revert to `False`/blank). Confirmed the hard way 2026-08-19 — see
+`sv08max/dkeu-patches/README.md` for the current list of patches to diff back in
+after any future reinstall, and `02-DIVERGENCES.md` for the full incident.
 
 ## B. SV08 MAX-specific reconciliation (read before touching Demon's guide)
 
@@ -110,16 +129,16 @@ FEEDER and PLR.*
       `was_interrupted = False` after it (*proves the hooks moved correctly*)
 - [ ] Feeder synced/fed during the print; LEDs behaved
 - [ ] `UNLOAD_FILAMENT` runs OUR choreography (feeder moves visibly paired)
-- [ ] **Check whether DKEU's post-homing offset correction actually fires for us.**
-      `demon_homing_control`'s finishing branch after `G28 Z` only checks for
-      object name `probe_eddy_current btt_eddy` — not `eddy`, which is what ours
-      is actually named (`demon_z_calibration` checks both names; this file only
-      checks one — looks like an oversight, not intentional). If it doesn't fire,
-      we silently fall through to a plain park with no extra `PROBE` +
-      `SET_Z_FROM_PROBE` sample. Watch Z repeatability/first-layer consistency
-      across a few homes; if it looks off, either rename our object to `btt_eddy`
-      or patch `demon_homing_control`'s condition to also check
-      `probe_eddy_current eddy`, matching `demon_z_calibration`'s pattern.
+- [x] **DKEU's post-homing offset correction firing for us — RESOLVED
+      2026-08-19.** Confirmed it did not: `demon_homing_control`'s finishing
+      branch after `G28 Z` only checked object name `probe_eddy_current btt_eddy`,
+      not `eddy` (`demon_z_calibration` already checked both names — this file
+      just hadn't). Patched to check both, matching `demon_z_calibration`'s
+      pattern. **This patch lives inside `Demon_Klipper_Essentials_Unified`, so a
+      DKEU reinstall silently wipes it** — it was in fact wiped and had to be
+      reapplied once already (2026-07-27 → wiped by the 2026-08-19 reinstall →
+      reapplied same day). Tracked in `sv08max/dkeu-patches/`; diff it back in
+      after any future reinstall. Full story in `02-DIVERGENCES.md`.
 
 ## Known follow-up
 

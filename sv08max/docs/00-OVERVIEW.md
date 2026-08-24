@@ -58,6 +58,16 @@ unresolved fan bug) — doc 01 itself has already been corrected to reflect all 
 it; **[01-DIVERGENCES.md](01-DIVERGENCES.md)** is the narrative of why, kept
 separate so the instructions stay short and the reasoning isn't lost.
 
+Doc 02 diverged even harder: a live-together DKEU v3.2.2 reinstall silently wiped
+every local patch inside `Demon_Klipper_Essentials_Unified` (confirming the
+patch-loss risk `dkeu-patches/README.md` had only warned about hypothetically),
+and getting an actual test print out the other side took root-causing roughly a
+dozen distinct bugs — most of them the same underlying mismatch (DKEU's SV08 MAX
+defaults assume a probe range wider than mainline `probe_eddy_current`'s
+hardcoded 4mm calibration ceiling actually provides) wearing different clothes.
+**[02-DIVERGENCES.md](02-DIVERGENCES.md)** is the full account — read it before
+your next DKEU reinstall, not after.
+
 ## Hardware facts (established by analysis + on-unit verification)
 
 | Fact | Detail |
