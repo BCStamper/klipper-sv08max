@@ -198,6 +198,19 @@ benefit. No eddy-ng anywhere — see step A.3.*
        config default, `z_park`'s several layers, all independently) — verify
        against Stage 2's own calibrated range once step 2 is actually done
        rather than assuming the exact same number carries over unchanged.
+6. [ ] **Temperature drift compensation** (`[temperature_probe eddy]`,
+       already in the rebuilt `printer.cfg`) — a real capability of the Eddy
+       Duo specifically (not the bare Eddy Coil, and not gated on USB vs CAN
+       despite how BTT's own doc heading reads — see the config file's own
+       comment for the full verification). Worth doing on a bed this size:
+       it compensates for thermal expansion of the machine's own mechanical
+       components, not just probe drift, and that effect scales with bed
+       area. `SET_IDLE_TIMEOUT TIMEOUT=36000` first (this runs long), then
+       `TEMPERATURE_PROBE_CALIBRATE PROBE=eddy TARGET=56 STEP=4` with **both
+       bed and nozzle hot** (calibrating with only one hot leaves a
+       systematic ~0.05mm gap later, per BTT's own doc) — paper-pinch at
+       each 4°C step as prompted, `TEMPERATURE_PROBE_COMPLETE` to finish
+       early if the probe temp plateaus before reaching target.
 
 ## H. Systems re-verify (quick — they didn't change, their neighbor did)
 
