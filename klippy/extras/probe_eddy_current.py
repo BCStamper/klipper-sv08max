@@ -1002,8 +1002,26 @@ class EddyParameterHelper:
             method = gcmd.get('METHOD', '').lower()
         if method not in ['scan', 'rapid_scan', 'tap']:
             return self._param_helper.get_probe_params(gcmd)
-        probe_speed = gcmd.get_float("PROBE_SPEED", 5.0, above=0.)
-        lift_speed = gcmd.get_float("LIFT_SPEED", 5.0, above=0.)
+        # sv08max patch (2026-09-09): these two defaulted to a hardcoded 5.0,
+        # never consulting [probe_eddy_current]'s own speed/lift_speed config,
+        # on this exact branch (scan/rapid_scan/tap methods only -- the plain
+        # branch above already did read config via self._param_helper). This
+        # made a configured lift_speed unreachable for any tap probe that
+        # doesn't explicitly pass LIFT_SPEED= itself -- concretely,
+        # TEMPERATURE_PROBE_CALIBRATE's automatic per-sample retrigger
+        # (Klipper's own internal run_script("TEMPERATURE_PROBE_NEXT") with
+        # zero parameters) can never carry one, always hit the hardcoded
+        # 5.0mm/s default, failed EddyTap's own "insufficient lift" sample-
+        # window check, and crashed klippy (an exception inside that internal
+        # timer callback isn't caught gracefully the way a directly-typed
+        # command's error is). Falling back to the already-config-aware
+        # ProbeParameterHelper's own speed/lift_speed here -- rather than a
+        # bare 5.0 -- fixes that while still letting an explicit PROBE_SPEED=/
+        # LIFT_SPEED= on any given call override it, unchanged.
+        probe_speed = gcmd.get_float("PROBE_SPEED", self._param_helper.speed,
+                                     above=0.)
+        lift_speed = gcmd.get_float("LIFT_SPEED", self._param_helper.lift_speed,
+                                    above=0.)
         samples = gcmd.get_int("SAMPLES", 1, minval=1)
         samp_retract_dist = 0.
         samp_tolerance = gcmd.get_float("SAMPLES_TOLERANCE", 0.100, minval=0.)
